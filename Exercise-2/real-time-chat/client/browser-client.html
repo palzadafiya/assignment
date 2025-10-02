@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-g">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Client</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 10px; }
+        #log { flex-grow: 1; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; overflow-y: scroll; background-color: #f9f9f9; }
+        .controls, .chat-box { display: flex; gap: 10px; margin-bottom: 10px; }
+        input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 8px 12px; border: none; background-color: #007bff; color: white; cursor: pointer; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #chat-controls { display: none; }
+    </style>
+</head>
+<body>
+
+    <h2>Chat Room Client</h2>
+
+    <div class="controls">
+        <input type="text" id="roomId" placeholder="Room ID (e.g., general)" value="general">
+        <input type="text" id="userName" placeholder="Your Name">
+        <button id="joinBtn">Join Room</button>
+    </div>
+
+    <div id="chat-controls" class="chat-box">
+        <input type="text" id="messageInput" placeholder="Type a message...">
+        <button id="sendBtn">Send</button>
+    </div>
+    
+    <h4>Log:</h4>
+    <pre id="log"></pre>
+
+    <script>
+        const roomIdInput = document.getElementById('roomId');
+        const userNameInput = document.getElementById('userName');
+        const joinBtn = document.getElementById('joinBtn');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const log = document.getElementById('log');
+        const chatControls = document.getElementById('chat-controls');
+
+        let ws;
+
+        function appendLog(message) {
+            log.innerHTML += `${new Date().toLocaleTimeString()}: ${message}\n`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        joinBtn.addEventListener('click', () => {
+            const roomId = roomIdInput.value;
+            const userName = userNameInput.value;
+
+            if (!roomId || !userName) {
+                alert('Please enter a Room ID and Your Name.');
+                return;
+            }
+
+            ws = new WebSocket('ws://localhost:8080');
+
+            ws.onopen = () => {
+                appendLog('Connected to server.');
+                const joinPayload = {
+                    type: 'joinRoom',
+                    payload: { roomId, userName }
+                };
+                ws.send(JSON.stringify(joinPayload));
+                
+                // Enable chat controls
+                joinBtn.disabled = true;
+                userNameInput.disabled = true;
+                roomIdInput.disabled = true;
+                chatControls.style.display = 'flex';
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'newMessage') {
+                    const msg = data.payload;
+                    appendLog(`[${msg.senderName}]: ${msg.content}`);
+                } else {
+                    // Log other message types like user lists or history
+                    appendLog(`Server Event: ${JSON.stringify(data)}`);
+                }
+            };
+
+            ws.onclose = () => {
+                appendLog('Disconnected from server.');
+                joinBtn.disabled = false;
+                userNameInput.disabled = false;
+                roomIdInput.disabled = false;
+                chatControls.style.display = 'none';
+            };
+
+            ws.onerror = (error) => {
+                appendLog(`WebSocket Error: ${error.message}`);
+            };
+        });
+
+        sendBtn.addEventListener('click', () => {
+            const content = messageInput.value;
+            if (ws && content) {
+                const messagePayload = {
+                    type: 'sendMessage',
+                    payload: { content }
+                };
+                ws.send(JSON.stringify(messagePayload));
+                messageInput.value = '';
+            }
+        });
+        
+        messageInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                sendBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>
